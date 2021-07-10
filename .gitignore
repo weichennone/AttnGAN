@@ -4,3 +4,8 @@ code/*.pyc
 code/miscc/*.pyc
 .DS_Store
 .idea/
+*.zip
+*.pth
+*.png
+*.jpg
+*.pickle
