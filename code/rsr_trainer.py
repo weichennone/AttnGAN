@@ -17,8 +17,10 @@ from model import G_DCGAN, G_NET
 from datasets import prepare_data
 from model import RNN_ENCODER, CNN_ENCODER
 
-from miscc.losses import words_loss
-from miscc.losses import discriminator_loss, generator_loss, KL_loss
+# from miscc.losses import words_loss
+# from miscc.losses import discriminator_loss, generator_loss, KL_loss
+from rsr_losses import words_loss
+from rsr_losses import discriminator_loss, generator_loss, KL_loss, swd_loss
 import os
 import time
 import numpy as np
@@ -223,10 +225,19 @@ class condGANTrainer(object):
 
         batch_size = self.batch_size
         nz = cfg.GAN.Z_DIM
-        noise = Variable(torch.FloatTensor(batch_size, nz))
+        # parameters of rsr
+        num_small_batch = cfg.TRAIN.NUM_BATCH_SIZE
+        d_img = 8192
+        N_rotmat = 1
+        large_batch_size = num_small_batch * batch_size
+        # noise = Variable(torch.FloatTensor(batch_size, nz))
+        noise = Variable(torch.FloatTensor(large_batch_size, nz))
+        all_real_features = torch.zeros(cfg.TREE.BRANCH_NUM, large_batch_size, d_img)
+        all_fake_features = torch.zeros(cfg.TREE.BRANCH_NUM, large_batch_size, d_img)
         fixed_noise = Variable(torch.FloatTensor(batch_size, nz).normal_(0, 1))
         if cfg.CUDA:
             noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
+            all_real_features, all_fake_features = all_real_features.cuda(), all_fake_features.cuda()
 
         gen_iterations = 0
         # gen_iterations = start_epoch * self.num_batches
@@ -243,9 +254,11 @@ class condGANTrainer(object):
                 # (1) Prepare training data and Compute text embeddings
                 ######################################################
                 data = data_iter.next()
+                # TODO: check what "class_ids" represents
                 imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
 
-                hidden = text_encoder.init_hidden(batch_size)
+                # hidden = text_encoder.init_hidden(batch_size)
+                hidden = text_encoder.init_hidden(large_batch_size)
                 # words_embs: batch_size x nef x seq_len
                 # sent_emb: batch_size x nef
                 words_embs, sent_emb = text_encoder(captions, cap_lens, hidden)
@@ -256,27 +269,34 @@ class condGANTrainer(object):
                     mask = mask[:, :num_words]
 
                 #######################################################
-                # (2) Generate fake images
+                # (2) Generate noise of fake images
                 ######################################################
                 # based on noise + text embeddings
                 noise.data.normal_(0, 1)
-                fake_imgs, _, mu, logvar = netG(noise, sent_emb, words_embs, mask)
 
                 #######################################################
                 # (3) Update D network
                 ######################################################
-                # change it to Wasserstein Distance
                 errD_total = 0
                 D_logs = ''
-                for i in range(len(netsD)):
-                    netsD[i].zero_grad()
-                    errD = discriminator_loss(netsD[i], imgs[i], fake_imgs[i],
-                                              sent_emb, real_labels, fake_labels)
-                    # backward and update parameters
-                    errD.backward()
-                    optimizersD[i].step()
-                    errD_total += errD
-                    D_logs += 'errD%d: %.2f ' % (i, errD.data[0])
+                for j in range(num_small_batch):
+                    fake_imgs, _, mu, logvar = netG(noise[j * batch_size: (j + 1) * batch_size],
+                                                    sent_emb[j * batch_size: (j + 1) * batch_size],
+                                                    words_embs[j * batch_size: (j + 1) * batch_size],
+                                                    mask[j * batch_size: (j + 1) * batch_size])
+                    sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    errD_total_small_batch = 0
+                    for i in range(len(netsD)):
+                        netsD[i].zero_grad()
+                        errD = discriminator_loss(netsD[i], sliced_imgs[i], fake_imgs[i],
+                                                  sent_emb[j * batch_size: (j + 1) * batch_size],
+                                                  real_labels, fake_labels)
+                        # backward and update parameters
+                        errD.backward()
+                        errD_total_small_batch += errD
+                        optimizersD[i].step()
+                    errD_total += errD_total_small_batch
+                    D_logs += 'errD%d: %.2f ' % (i, errD_total_small_batch.data[0])
 
                 #######################################################
                 # (4) Update G network: maximize log(D(G(z)))
@@ -285,17 +305,65 @@ class condGANTrainer(object):
                 step += 1
                 gen_iterations += 1
 
+                ### RUN
+                for j in range(num_small_batch):
+                    fake_imgs, _, mu, logvar = netG(noise[j * batch_size: (j + 1) * batch_size],
+                                                    sent_emb[j * batch_size: (j + 1) * batch_size],
+                                                    words_embs[j * batch_size: (j + 1) * batch_size],
+                                                    mask[j * batch_size: (j + 1) * batch_size])
+                    sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    for i in range(len(netsD)):
+                        all_real_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](sliced_imgs[i]).view(batch_size, -1)
+                        all_fake_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](fake_imgs[i]).view(batch_size, -1)
+
+                ### SORT
+                rotmat_img = torch.randn(d_img, N_rotmat)
+                if cfg.CUDA:
+                    rotmat_img = rotmat_img.cuda()
+
+                all_out_img_sort_relative = []
+                with torch.no_grad():
+                    for i in range(len(netsD)):
+                        all_real_features_projected = all_real_features[i].mm(rotmat_img)
+                        all_fake_features_projected = all_fake_features[i].mm(rotmat_img)
+
+                        [_, out_img_sort_ix] = torch.sort(all_fake_features_projected, dim=0)
+                        [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
+                        all_out_img_sort_relative.append(out_img_sort_relative)
+                        [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
+
                 # do not need to compute gradient for Ds
                 # self.set_requires_grad_value(netsD, False)
                 netG.zero_grad()
-                errG_total, G_logs = \
-                    generator_loss(netsD, image_encoder, fake_imgs, real_labels,
-                                   words_embs, sent_emb, match_labels, cap_lens, class_ids)
-                kl_loss = KL_loss(mu, logvar)
-                errG_total += kl_loss
-                G_logs += 'kl_loss: %.2f ' % kl_loss.data[0]
-                # backward and update parameters
-                errG_total.backward()
+                # errG_total, G_logs = \
+                #     generator_loss(netsD, image_encoder, fake_imgs, real_labels,
+                #                    words_embs, sent_emb, match_labels, cap_lens, class_ids)
+                G_logs_total = ''
+                for j in range(num_small_batch):
+                    fake_imgs, _, mu, logvar = netG(noise[j * batch_size: (j + 1) * batch_size],
+                                                    sent_emb[j * batch_size: (j + 1) * batch_size],
+                                                    words_embs[j * batch_size: (j + 1) * batch_size],
+                                                    mask[j * batch_size: (j + 1) * batch_size])
+                    # sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    # print(all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size].shape)
+                    # print(imgs[i].shape)
+                    # sliced_imgs = [imgs[i].gather(0, all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size]) for i in range(len(imgs))]
+                    sliced_real_features = all_real_features_projected_sorted.gather(0, all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size])
+                    errG_total, G_logs = \
+                        swd_loss(netsD, image_encoder, fake_imgs, real_labels,
+                                 words_embs[j * batch_size: (j + 1) * batch_size],
+                                 sent_emb[j * batch_size: (j + 1) * batch_size],
+                                 match_labels, cap_lens,
+                                 class_ids[j * batch_size: (j + 1) * batch_size],
+                                 sliced_real_features, rotmat_img)
+
+                    kl_loss = KL_loss(mu, logvar)
+                    errG_total += kl_loss
+                    G_logs += 'kl_loss: %.2f ' % kl_loss.data[0]
+                    G_logs_total += G_logs
+                    # backward and update parameters
+                    errG_total.backward()
+
                 optimizerG.step()
                 for p, avg_p in zip(netG.parameters(), avg_param_G):
                     avg_p.mul_(0.999).add_(0.001, p.data)

@@ -2,7 +2,8 @@ from __future__ import print_function
 
 from miscc.config import cfg, cfg_from_file
 from datasets import TextDataset
-from trainer import condGANTrainer as trainer
+# from trainer import condGANTrainer as trainer
+from rsr_trainer import condGANTrainer as trainer
 
 import os
 import sys
@@ -128,8 +129,9 @@ if __name__ == "__main__":
                           base_size=cfg.TREE.BASE_SIZE,
                           transform=image_transform)
     assert dataset
+    # TODO: add large batch size to cfg
     dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
+        dataset, batch_size=cfg.TRAIN.BATCH_SIZE * cfg.TRAIN.NUM_BATCH_SIZE,
         drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
 
     # Define models and go to train/evaluate
@@ -137,7 +139,8 @@ if __name__ == "__main__":
 
     start_t = time.time()
     if cfg.TRAIN.FLAG:
-        algo.train()
+        # algo.train()
+        algo.rsr_train()
     else:
         '''generate images from pre-extracted embeddings'''
         if cfg.B_VALIDATION:
