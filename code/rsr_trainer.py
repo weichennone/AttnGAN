@@ -273,30 +273,46 @@ class condGANTrainer(object):
                 ######################################################
                 # based on noise + text embeddings
                 noise.data.normal_(0, 1)
-
+                all_fake_imgs = []
+                for j in range(num_small_batch):
+                    fake_imgs, _, _, _ = netG(noise[j * batch_size: (j + 1) * batch_size],
+                                              sent_emb[j * batch_size: (j + 1) * batch_size],
+                                              words_embs[j * batch_size: (j + 1) * batch_size],
+                                              mask[j * batch_size: (j + 1) * batch_size])
+                    all_fake_imgs.append(fake_imgs)
                 #######################################################
                 # (3) Update D network
                 ######################################################
+                # DEBUG
+                # print("before dis")
+                # os.system("nvidia-smi")
+
                 errD_total = 0
                 D_logs = ''
                 for j in range(num_small_batch):
-                    fake_imgs, _, mu, logvar = netG(noise[j * batch_size: (j + 1) * batch_size],
-                                                    sent_emb[j * batch_size: (j + 1) * batch_size],
-                                                    words_embs[j * batch_size: (j + 1) * batch_size],
-                                                    mask[j * batch_size: (j + 1) * batch_size])
-                    sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    # fake_imgs, _, _, _ = netG(noise[j * batch_size: (j + 1) * batch_size],
+                    #                                 sent_emb[j * batch_size: (j + 1) * batch_size],
+                    #                                 words_embs[j * batch_size: (j + 1) * batch_size],
+                    #                                 mask[j * batch_size: (j + 1) * batch_size])
+                    # sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
                     errD_total_small_batch = 0
                     for i in range(len(netsD)):
                         netsD[i].zero_grad()
-                        errD = discriminator_loss(netsD[i], sliced_imgs[i], fake_imgs[i],
+                        errD = discriminator_loss(netsD[i],
+                                                  imgs[i][j * batch_size: (j + 1) * batch_size],
+                                                  all_fake_imgs[j][i],
                                                   sent_emb[j * batch_size: (j + 1) * batch_size],
                                                   real_labels, fake_labels)
                         # backward and update parameters
                         errD.backward()
-                        errD_total_small_batch += errD
+                        errD_total_small_batch += errD.detach()
+                        D_logs += 'errD%d: %.2f ' % (i, errD.data[0])
                         optimizersD[i].step()
                     errD_total += errD_total_small_batch
-                    D_logs += 'errD%d: %.2f ' % (i, errD_total_small_batch.data[0])
+
+                    # del fake_imgs
+                    # del sliced_imgs
+                    # torch.cuda.empty_cache()
 
                 #######################################################
                 # (4) Update G network: maximize log(D(G(z)))
@@ -305,16 +321,35 @@ class condGANTrainer(object):
                 step += 1
                 gen_iterations += 1
 
+                # DEBUG
+                # print("before RSR-run")
+                # os.system("nvidia-smi")
+
                 ### RUN
                 for j in range(num_small_batch):
-                    fake_imgs, _, mu, logvar = netG(noise[j * batch_size: (j + 1) * batch_size],
-                                                    sent_emb[j * batch_size: (j + 1) * batch_size],
-                                                    words_embs[j * batch_size: (j + 1) * batch_size],
-                                                    mask[j * batch_size: (j + 1) * batch_size])
-                    sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    # fake_imgs, _, _, _ = netG(noise[j * batch_size: (j + 1) * batch_size],
+                    #                                 sent_emb[j * batch_size: (j + 1) * batch_size],
+                    #                                 words_embs[j * batch_size: (j + 1) * batch_size],
+                    #                                 mask[j * batch_size: (j + 1) * batch_size])
+                    # sliced_imgs = [arr[j * batch_size: (j + 1) * batch_size] for arr in imgs]
+                    # DEBUG
+                    # print("before RSR-run-beforeassign")
+                    # os.system("nvidia-smi")
                     for i in range(len(netsD)):
-                        all_real_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](sliced_imgs[i]).view(batch_size, -1)
-                        all_fake_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](fake_imgs[i]).view(batch_size, -1)
+                        # all_real_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](sliced_imgs[i]).view(batch_size, -1)
+                        # all_fake_features[i][j * batch_size: (j + 1) * batch_size] = netsD[i](fake_imgs[i]).view(batch_size, -1)
+                        all_real_features[i][j * batch_size: (j + 1) * batch_size].copy_(netsD[i](imgs[i][j * batch_size: (j + 1) * batch_size]).view(
+                            batch_size, -1))
+                        all_fake_features[i][j * batch_size: (j + 1) * batch_size].copy_(netsD[i](all_fake_imgs[j][i]).view(
+                            batch_size, -1))
+
+                # del all_fake_imgs
+                # del sliced_imgs
+                # torch.cuda.empty_cache()
+
+                # DEBUG
+                # print("before RSR-sort")
+                # os.system("nvidia-smi")
 
                 ### SORT
                 rotmat_img = torch.randn(d_img, N_rotmat)
@@ -331,7 +366,16 @@ class condGANTrainer(object):
                         [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
                         all_out_img_sort_relative.append(out_img_sort_relative)
                         [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
+                    # del all_real_features_projected
+                    # del all_fake_features_projected
+                    # del out_img_sort_ix
+                    # torch.cuda.empty_cache()
 
+                # DEBUG
+                # print("before RSR-rerun")
+                # os.system("nvidia-smi")
+
+                ### RERUN
                 # do not need to compute gradient for Ds
                 # self.set_requires_grad_value(netsD, False)
                 netG.zero_grad()
@@ -348,8 +392,8 @@ class condGANTrainer(object):
                     # print(all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size].shape)
                     # print(imgs[i].shape)
                     # sliced_imgs = [imgs[i].gather(0, all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size]) for i in range(len(imgs))]
-                    sliced_real_features = all_real_features_projected_sorted.gather(0, all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size])
-                    errG_total, G_logs = \
+                    sliced_real_features = [all_real_features_projected_sorted.gather(0, all_out_img_sort_relative[i][j * batch_size: (j + 1) * batch_size]) for i in range(len(imgs))]
+                    errG_total, G_logs, fake_features, fake_projected, real_sorted, fake_sorted = \
                         swd_loss(netsD, image_encoder, fake_imgs, real_labels,
                                  words_embs[j * batch_size: (j + 1) * batch_size],
                                  sent_emb[j * batch_size: (j + 1) * batch_size],
@@ -365,6 +409,21 @@ class condGANTrainer(object):
                     errG_total.backward()
 
                 optimizerG.step()
+
+                del all_real_features_projected_sorted
+                del fake_imgs
+                del sliced_real_features
+                del rotmat_img
+                del fake_features, fake_projected, real_sorted, fake_sorted
+                del all_out_img_sort_relative
+                torch.cuda.empty_cache()
+
+                # DEBUG
+                # print("after RSR")
+                # os.system("nvidia-smi")
+                # if step == 2:
+                #     exit()
+
                 for p, avg_p in zip(netG.parameters(), avg_param_G):
                     avg_p.mul_(0.999).add_(0.001, p.data)
 
@@ -390,6 +449,9 @@ class condGANTrainer(object):
                   % (epoch, self.max_epoch, self.num_batches,
                      errD_total.data[0], errG_total.data[0],
                      end_t - start_t))
+
+            del errG_total, errD_total
+            torch.cuda.empty_cache()
 
             if epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:  # and epoch != 0:
                 self.save_model(netG, avg_param_G, netsD, epoch)

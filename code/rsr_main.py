@@ -99,6 +99,11 @@ if __name__ == "__main__":
     print('Using config:')
     pprint.pprint(cfg)
 
+    # See if these can avoid memory from increasing
+    # Unfortunately no
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
+
     if not cfg.TRAIN.FLAG:
         args.manualSeed = 100
     elif args.manualSeed is None:
