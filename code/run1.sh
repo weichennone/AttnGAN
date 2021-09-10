@@ -1,0 +1,1 @@
+python main.py --cfg cfg/bird_attn2.yml --gpu 0
