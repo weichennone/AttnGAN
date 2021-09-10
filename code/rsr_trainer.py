@@ -284,8 +284,8 @@ class condGANTrainer(object):
                 # (3) Update D network
                 ######################################################
                 # DEBUG
-                print("before dis")
-                os.system("nvidia-smi")
+                # print("before dis")
+                # os.system("nvidia-smi")
 
                 errD_total = 0
                 D_logs = ''
@@ -322,8 +322,8 @@ class condGANTrainer(object):
                 gen_iterations += 1
 
                 # DEBUG
-                print("before RSR-run")
-                os.system("nvidia-smi")
+                # print("before RSR-run")
+                # os.system("nvidia-smi")
 
                 ### RUN
                 for j in range(num_small_batch):
@@ -348,8 +348,8 @@ class condGANTrainer(object):
                 # torch.cuda.empty_cache()
 
                 # DEBUG
-                print("before RSR-sort")
-                os.system("nvidia-smi")
+                # print("before RSR-sort")
+                # os.system("nvidia-smi")
 
                 ### SORT
                 rotmat_img = torch.randn(d_img, N_rotmat)
@@ -362,18 +362,25 @@ class condGANTrainer(object):
                         all_real_features_projected = all_real_features[i].mm(rotmat_img)
                         all_fake_features_projected = all_fake_features[i].mm(rotmat_img)
 
-                        [_, out_img_sort_ix] = torch.sort(all_fake_features_projected, dim=0)
-                        [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
-                        all_out_img_sort_relative.append(out_img_sort_relative)
-                        [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
+                        # [_, out_img_sort_ix] = torch.sort(all_fake_features_projected, dim=0)
+                        # [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
+                        # all_out_img_sort_relative.append(out_img_sort_relative)
+                        # [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
+
+                        [_, out_img_sort_ix] = torch.sort(all_fake_features_projected.cpu(), dim=0)
+                        out_img_sort_relative = out_img_sort_ix.argsort(0)
+                        all_out_img_sort_relative.append(out_img_sort_relative.cuda())
+
+                        [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected.cpu(), dim=0)
+                        all_real_features_projected_sorted = all_real_features_projected_sorted.cuda()
                     # del all_real_features_projected
                     # del all_fake_features_projected
                     # del out_img_sort_ix
                     # torch.cuda.empty_cache()
 
                 # DEBUG
-                print("before RSR-rerun")
-                os.system("nvidia-smi")
+                # print("before RSR-rerun")
+                # os.system("nvidia-smi")
 
                 ### RERUN
                 # do not need to compute gradient for Ds
@@ -419,8 +426,8 @@ class condGANTrainer(object):
                 torch.cuda.empty_cache()
 
                 # DEBUG
-                print("after RSR")
-                os.system("nvidia-smi")
+                # print("after RSR")
+                # os.system("nvidia-smi")
                 # if step == 2:
                 #     exit()
 
