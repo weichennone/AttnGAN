@@ -180,7 +180,8 @@ def swd_loss(netsD, image_encoder, fake_imgs, real_labels,
         fake_projected = fake_features.mm(rotmat_img)
         real_sorted = torch.sort(real_projected[i], dim=0)[0]
         fake_sorted = torch.sort(fake_projected, dim=0)[0]
-        g_loss = torch.sqrt(torch.sum((real_sorted - fake_sorted) ** 2)) / rotmat_img.shape[1]
+        # g_loss = torch.sqrt(torch.sum((real_sorted - fake_sorted) ** 2)) / rotmat_img.shape[1]
+        g_loss = torch.sqrt(torch.mean((real_sorted - fake_sorted) ** 2))
         errG_total += g_loss
         # err_img = errG_total.data[0]
         logs += 'g_loss%d: %.2f ' % (i, g_loss.data[0])
