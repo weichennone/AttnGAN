@@ -377,17 +377,17 @@ class condGANTrainer(object):
                         all_real_features_projected = all_real_features[i].mm(rotmat_img)
                         all_fake_features_projected = all_fake_features[i].mm(rotmat_img)
 
-                        # [_, out_img_sort_ix] = torch.sort(all_fake_features_projected, dim=0)
-                        # [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
-                        # all_out_img_sort_relative.append(out_img_sort_relative)
-                        # [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
-
-                        [_, out_img_sort_ix] = torch.sort(all_fake_features_projected.cpu(), dim=0)
+                        [_, out_img_sort_ix] = torch.sort(all_fake_features_projected, dim=0)
                         [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
-                        all_out_img_sort_relative.append(out_img_sort_relative.cuda())
+                        all_out_img_sort_relative.append(out_img_sort_relative)
+                        [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected, dim=0)
 
-                        [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected.cpu(), dim=0)
-                        all_real_features_projected_sorted = all_real_features_projected_sorted.cuda()
+                        # [_, out_img_sort_ix] = torch.sort(all_fake_features_projected.cpu(), dim=0)
+                        # [_, out_img_sort_relative] = out_img_sort_ix.sort(0)
+                        # all_out_img_sort_relative.append(out_img_sort_relative.cuda())
+                        #
+                        # [all_real_features_projected_sorted, _] = torch.sort(all_real_features_projected.cpu(), dim=0)
+                        # all_real_features_projected_sorted = all_real_features_projected_sorted.cuda()
                     # del all_real_features_projected
                     # del all_fake_features_projected
                     # del out_img_sort_ix
