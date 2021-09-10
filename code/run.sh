@@ -1,1 +1,1 @@
-python main.py --cfg cfg/bird_attn2.yml --gpu 2
+python rsr_main.py --cfg cfg/bird_attn2.yml --gpu 2
