@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     # See if these can avoid memory from increasing
     # Unfortunately no
-    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.enabled = False
     torch.backends.cudnn.benchmark = True
 
     if not cfg.TRAIN.FLAG:

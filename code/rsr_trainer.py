@@ -284,8 +284,8 @@ class condGANTrainer(object):
                 # (3) Update D network
                 ######################################################
                 # DEBUG
-                # print("before dis")
-                # os.system("nvidia-smi")
+                print("before dis")
+                os.system("nvidia-smi")
 
                 errD_total = 0
                 D_logs = ''
@@ -322,8 +322,8 @@ class condGANTrainer(object):
                 gen_iterations += 1
 
                 # DEBUG
-                # print("before RSR-run")
-                # os.system("nvidia-smi")
+                print("before RSR-run")
+                os.system("nvidia-smi")
 
                 ### RUN
                 for j in range(num_small_batch):
@@ -348,8 +348,8 @@ class condGANTrainer(object):
                 # torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("before RSR-sort")
-                # os.system("nvidia-smi")
+                print("before RSR-sort")
+                os.system("nvidia-smi")
 
                 ### SORT
                 rotmat_img = torch.randn(d_img, N_rotmat)
@@ -372,8 +372,8 @@ class condGANTrainer(object):
                     # torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("before RSR-rerun")
-                # os.system("nvidia-smi")
+                print("before RSR-rerun")
+                os.system("nvidia-smi")
 
                 ### RERUN
                 # do not need to compute gradient for Ds
@@ -419,8 +419,8 @@ class condGANTrainer(object):
                 torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("after RSR")
-                # os.system("nvidia-smi")
+                print("after RSR")
+                os.system("nvidia-smi")
                 # if step == 2:
                 #     exit()
 
