@@ -26,6 +26,8 @@ import time
 import numpy as np
 import sys
 
+import gc
+
 # ################# Text to image task############################ #
 class condGANTrainer(object):
     def __init__(self, output_dir, data_loader, n_words, ixtoword):
@@ -46,6 +48,14 @@ class condGANTrainer(object):
         self.ixtoword = ixtoword
         self.data_loader = data_loader
         self.num_batches = len(self.data_loader)
+
+    def _show_resource(self):
+        for obj in gc.get_objects():
+            try:
+                if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    print(type(obj), obj.size())
+            except:
+                pass
 
     def build_models(self):
         # ###################encoders######################################## #
@@ -284,8 +294,9 @@ class condGANTrainer(object):
                 # (3) Update D network
                 ######################################################
                 # DEBUG
-                # print("before dis")
+                print("before dis")
                 # os.system("nvidia-smi")
+                self._show_resource()
 
                 errD_total = 0
                 D_logs = ''
@@ -322,8 +333,9 @@ class condGANTrainer(object):
                 gen_iterations += 1
 
                 # DEBUG
-                # print("before RSR-run")
+                print("before RSR-run")
                 # os.system("nvidia-smi")
+                self._show_resource()
 
                 ### RUN
                 for j in range(num_small_batch):
@@ -348,8 +360,9 @@ class condGANTrainer(object):
                 # torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("before RSR-sort")
+                print("before RSR-sort")
                 # os.system("nvidia-smi")
+                self._show_resource()
 
                 ### SORT
                 rotmat_img = torch.randn(d_img, N_rotmat)
@@ -379,8 +392,9 @@ class condGANTrainer(object):
                     # torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("before RSR-rerun")
+                print("before RSR-rerun")
                 # os.system("nvidia-smi")
+                self._show_resource()
 
                 ### RERUN
                 # do not need to compute gradient for Ds
@@ -426,7 +440,8 @@ class condGANTrainer(object):
                 torch.cuda.empty_cache()
 
                 # DEBUG
-                # print("after RSR")
+                print("after RSR")
+                self._show_resource()
                 # os.system("nvidia-smi")
                 # if step == 2:
                 #     exit()
