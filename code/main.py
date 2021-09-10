@@ -98,6 +98,9 @@ if __name__ == "__main__":
     print('Using config:')
     pprint.pprint(cfg)
 
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = True
+
     if not cfg.TRAIN.FLAG:
         args.manualSeed = 100
     elif args.manualSeed is None:
